@@ -1,5 +1,6 @@
 use pptx_to_md::{ParserConfig, PresentationContainer};
 use std::{error::Error, fs};
+use tokenizers::Tokenizer;
 use walkdir::DirEntry;
 
 #[derive(Debug)]
@@ -15,29 +16,42 @@ fn chunk_string(
     source: &str,
     unit: &str,
     text: &str,
-    chunk_words: usize,
-    overlap_words: usize,
+    tokenizer: &Tokenizer,
+    chunk_tokens: usize,
+    overlap_tokens: usize,
 ) -> Vec<Chunk> {
-    let words: Vec<&str> = text.split_whitespace().collect();
-    if words.is_empty() {
+    // run the tokenizer on the full text
+    let encoding = match tokenizer.encode(text, false) {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    let ids = encoding.get_ids();
+    let offsets = encoding.get_offsets();
+
+    if ids.is_empty() {
         return vec![];
     }
 
     let mut chunks = Vec::new();
     let mut start = 0;
 
+    // chunk until out of string
     loop {
-        let end = (start + chunk_words).min(words.len());
+        let end = (start + chunk_tokens).min(ids.len());
+
+        let char_start = offsets[start].0;
+        let char_end = offsets[end - 1].1;
+
         chunks.push(Chunk {
             source: source.to_string(),
             unit: unit.to_string(),
-            text: words[start..end].join(" "),
+            text: text[char_start..char_end].to_string(),
         });
 
-        if end == words.len() {
+        if end == ids.len() {
             break;
         }
-        start = end - overlap_words;
+        start = end - overlap_tokens;
     }
 
     chunks
@@ -45,14 +59,17 @@ fn chunk_string(
 
 /// Extracts a file's text, splits it into structural units (page/slide/
 /// header/paragraph depending on file type), and chunks each unit.
-pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Error>> {
+pub fn get_chunks_from_file(
+    entry: &DirEntry,
+    tokenizer: &Tokenizer,
+) -> Result<Vec<Chunk>, Box<dyn Error>> {
     let path = entry.path();
     let ext = path.extension().and_then(|e| e.to_str());
     let source = path.file_name().unwrap().to_string_lossy().to_string();
 
     match ext {
         Some("txt") => {
-            println!("TEXT:{}", path.display());
+            // get text from file
             let contents = fs::read_to_string(path)?;
             let mut chunks = Vec::new();
             for (i, para) in contents
@@ -61,26 +78,46 @@ pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Erro
                 .enumerate()
             {
                 let unit = format!("para_{}", i + 1);
-                chunks.extend(chunk_string(&source, &unit, para.trim(), 200, 40));
+                chunks.extend(chunk_string(
+                    &source,
+                    &unit,
+                    para.trim(),
+                    tokenizer,
+                    200,
+                    40,
+                ));
             }
             Ok(chunks)
         }
         Some("pdf") => {
-            println!("PDF:{}", path.display());
             let bytes = fs::read(path)?;
             let pages = pdf_extract::extract_text_from_mem_by_pages(&bytes)?;
-            let mut chunks = Vec::new();
-            for (i, page_text) in pages.into_iter().enumerate() {
-                if page_text.trim().is_empty() {
-                    continue;
-                }
-                let unit = format!("page_{}", i + 1);
-                chunks.extend(chunk_string(&source, &unit, &page_text, 200, 40));
+            let mut full_text = String::new();
+            let mut page_boundaries = Vec::new(); // (start_char, page_number)
+
+            for (i, page_text) in pages.iter().enumerate() {
+                page_boundaries.push((full_text.len(), i + 1));
+                full_text.push_str(page_text);
             }
+
+            let mut chunks = chunk_string(&source, "unknown", &full_text, tokenizer, 200, 40);
+
+            for chunk in chunks.iter_mut() {
+                if let Some(pos) = full_text.find(chunk.text.as_str()) {
+                    let page = page_boundaries
+                        .iter()
+                        .rev()
+                        .find(|(start, _)| *start <= pos)
+                        .map(|(_, page)| *page)
+                        .unwrap_or(1);
+                    chunk.unit = format!("page_{}", page);
+                }
+            }
+
             Ok(chunks)
         }
         Some("pptx") => {
-            println!("PPTX:{}", path.display());
+            // load presentation
             let mut presentation = PresentationContainer::open(
                 path,
                 ParserConfig::builder().extract_images(false).build(),
@@ -99,6 +136,7 @@ pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Erro
                                 &source,
                                 &current_unit,
                                 buffer.trim(),
+                                &tokenizer,
                                 200,
                                 40,
                             ));
@@ -112,12 +150,18 @@ pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Erro
                 buffer.push('\n');
             }
             if !buffer.trim().is_empty() {
-                chunks.extend(chunk_string(&source, &current_unit, buffer.trim(), 200, 40));
+                chunks.extend(chunk_string(
+                    &source,
+                    &current_unit,
+                    buffer.trim(),
+                    &tokenizer,
+                    200,
+                    40,
+                ));
             }
             Ok(chunks)
         }
         Some("md") => {
-            println!("MD:{}", path.display());
             let contents = fs::read_to_string(path)?;
 
             let mut chunks = Vec::new();
@@ -127,7 +171,14 @@ pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Erro
             for line in contents.lines() {
                 if line.starts_with("## ") {
                     if !buffer.trim().is_empty() {
-                        chunks.extend(chunk_string(&source, &current_unit, buffer.trim(), 200, 40));
+                        chunks.extend(chunk_string(
+                            &source,
+                            &current_unit,
+                            buffer.trim(),
+                            &tokenizer,
+                            200,
+                            40,
+                        ));
                     }
                     buffer.clear();
                     current_unit = line.trim_start_matches("## ").trim().to_string();
@@ -137,7 +188,14 @@ pub fn get_chunks_from_file(entry: &DirEntry) -> Result<Vec<Chunk>, Box<dyn Erro
                 buffer.push('\n');
             }
             if !buffer.trim().is_empty() {
-                chunks.extend(chunk_string(&source, &current_unit, buffer.trim(), 200, 40));
+                chunks.extend(chunk_string(
+                    &source,
+                    &current_unit,
+                    buffer.trim(),
+                    &tokenizer,
+                    200,
+                    40,
+                ));
             }
             Ok(chunks)
         }
