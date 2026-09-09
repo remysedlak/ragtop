@@ -73,6 +73,14 @@ Example:
 Each result shows a similarity score, the source file and location within it
 (page number, slide number, or section heading), and the matching text.
 
+### Reset Database
+
+To easily reset the database, run:
+
+```
+./target/release/ragtop reset
+```
+
 ### Help
 
 ```

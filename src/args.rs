@@ -22,4 +22,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = 3000)]
         port: u16,
     },
+    /// Reset the database
+    Reset,
 }

@@ -19,6 +19,15 @@ mod hf;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // get cli args and carry out logic
+    let args = RagArgs::parse();
+
+    if let Commands::Reset = args.command {
+        std::fs::remove_file("notes.db").ok();
+        println!("Database reset.");
+        return Ok(());
+    }
+
     // load a BERT model
     let device = Device::Cpu;
     let (model, tokenizer) = hf::load_bert_model(&device, "BAAI/bge-small-en-v1.5")?;
@@ -28,8 +37,6 @@ async fn main() -> anyhow::Result<()> {
     db::create_document_table(&conn)?;
     db::create_chunks_table(&conn)?;
 
-    // get cli args and carry out logic
-    let args = RagArgs::parse();
     match args.command {
         Commands::Serve { port } => {
             let shared_state = Arc::new(AppState {
@@ -58,7 +65,9 @@ async fn main() -> anyhow::Result<()> {
             for entry in WalkDir::new(&path) {
                 let entry = entry?;
                 if entry.file_type().is_file() {
-                    let source = entry.path().to_string_lossy().to_string();
+                    let source = entry.path().canonicalize()?.to_string_lossy().to_string();
+
+                    println!("Ingesting {source}");
                     let modified = entry
                         .metadata()?
                         .modified()?
@@ -75,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
                     db::update_document_modified(&conn, doc_id, modified)?;
                     db::delete_chunks_for_document(&conn, doc_id)?;
 
-                    match extract::get_chunks_from_file(&entry, &tokenizer) {
+                    match extract::get_chunks_from_file(&entry, &tokenizer, &source) {
                         Ok(chunks) => {
                             for chunk in chunks {
                                 if chunk.text.trim().is_empty() || is_degenerate(&chunk.text) {
@@ -100,9 +109,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Search { query, top_k } => {
             let results = db::search(&conn, &model, &tokenizer, &device, &query, top_k)?;
             for (source, unit, text, score) in results {
-                println!("{score:.4} | {source} ({unit})\n{text}\n");
+                println!("{score:.4} | {source}");
             }
         }
+        _ => {}
     }
     Ok(())
 }

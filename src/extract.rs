@@ -89,10 +89,10 @@ pub fn is_degenerate(text: &str) -> bool {
 pub fn get_chunks_from_file(
     entry: &DirEntry,
     tokenizer: &Tokenizer,
+    source: &str,
 ) -> Result<Vec<Chunk>, Box<dyn Error>> {
     let path = entry.path();
     let ext = path.extension().and_then(|e| e.to_str());
-    let source = path.file_name().unwrap().to_string_lossy().to_string();
 
     match ext {
         Some("txt") => {
