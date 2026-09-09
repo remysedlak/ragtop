@@ -1,36 +1,25 @@
+use crate::api::{AppState, handler};
+use crate::args::{Commands, RagArgs};
+use crate::db::{create_chunks_table, create_document_table};
+use crate::extract::is_degenerate;
+use axum::{Router, routing::get};
 use candle_core::Device;
 use clap::Parser;
+use tower_http::services::ServeDir;
+
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 use walkdir::WalkDir;
 
+mod api;
+mod args;
 mod db;
 mod extract;
 mod hf;
 
-use crate::{
-    db::{create_chunks_table, create_document_table},
-    extract::is_degenerate,
-};
-
-#[derive(Debug, Parser)]
-#[command(author, version, about)]
-pub struct RagArgs {
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Debug, clap::Subcommand)]
-pub enum Commands {
-    Ingest {
-        path: String,
-    },
-    Search {
-        query: String,
-        #[arg(short, long, default_value_t = 5)]
-        top_k: usize,
-    },
-}
-
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = RagArgs::parse();
 
     let device = Device::Cpu;
@@ -40,6 +29,25 @@ fn main() -> anyhow::Result<()> {
     create_chunks_table(&conn)?;
 
     match args.command {
+        Commands::Serve { port } => {
+            // build our application with a single route
+
+            let shared_state = Arc::new(AppState {
+                model,
+                tokenizer,
+                device,
+                conn: Mutex::new(conn),
+            });
+            let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
+                .await
+                .unwrap();
+            let app = Router::new()
+                .route("/search", axum::routing::post(api::search_handler))
+                .with_state(shared_state)
+                .fallback_service(ServeDir::new("static"));
+
+            axum::serve(listener, app).await.unwrap();
+        }
         Commands::Ingest { path } => {
             for entry in WalkDir::new(&path) {
                 let entry = entry?;

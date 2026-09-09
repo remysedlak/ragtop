@@ -7,18 +7,18 @@ pub struct RagArgs {
     pub command: Commands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, clap::Subcommand)]
 pub enum Commands {
-    /// Ingest all files in a folder into the database
     Ingest {
-        /// Path to the folder to ingest
         path: String,
     },
-    /// Search stored chunks for a query
     Search {
-        /// The search query
         query: String,
         #[arg(short, long, default_value_t = 5)]
         top_k: usize,
+    },
+    Serve {
+        #[arg(short, long, default_value_t = 3000)]
+        port: u16,
     },
 }
