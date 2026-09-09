@@ -57,6 +57,31 @@ fn chunk_string(
     chunks
 }
 
+fn strip_noise(text: &str) -> String {
+    let mut result = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("[Image unavailable:")
+            || trimmed.starts_with("<!-- Unsupported slide element:")
+            || trimmed.starts_with("**Source:")
+        {
+            continue;
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+    result
+}
+
+pub fn is_degenerate(text: &str) -> bool {
+    let stripped = strip_noise(text);
+    let real_words = stripped
+        .split_whitespace()
+        .filter(|w| w.chars().any(|c| c.is_alphabetic()))
+        .count();
+    real_words < 15
+}
+
 /// Extracts a file's text, splits it into structural units (page/slide/
 /// header/paragraph depending on file type), and chunks each unit.
 pub fn get_chunks_from_file(

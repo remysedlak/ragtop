@@ -8,7 +8,8 @@ use tokenizers::Tokenizer;
 pub fn load_model(device: &Device) -> Result<(BertModel, Tokenizer)> {
     // load the model from hf site
     let api = Api::new()?;
-    let repo = api.model("sentence-transformers/all-MiniLM-L6-v2".to_string());
+    // let repo = api.model("sentence-transformers/all-MiniLM-L6-v2".to_string());
+    let repo = api.model("BAAI/bge-small-en-v1.5".to_string());
     let config_filename = repo.get("config.json")?;
     let tokenizer_filename = repo.get("tokenizer.json")?;
     let weights_filename = repo.get("model.safetensors")?;
