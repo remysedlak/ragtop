@@ -1,5 +1,5 @@
 [package]
-name = "school_notes_ai"
+name = "ragtop"
 version = "0.1.0"
 edition = "2024"
 
@@ -9,7 +9,7 @@ candle = "0.1.0"
 candle-core = "0.11.0"
 candle-nn = "0.11.0"
 candle-transformers = "0.11.0"
-clap = "4.6.6"
+clap = { version = "4.6.6", features = ["derive"] }
 docx-rs = "0.4.22"
 hf-hub = "0.4"
 pdf-extract = "0.12.0"
@@ -19,11 +19,3 @@ rusqlite = "0.40.2"
 serde_json = "1.0.151"
 tokenizers = "0.23.2"
 walkdir = "2.5.0"
-
-[[bin]]
-name = "test"
-path = "./src/search_test.rs"
-
-[[bin]]
-name ="setup"
-path = "./src/main.rs"

@@ -5,7 +5,7 @@ use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use hf_hub::api::sync::Api;
 use tokenizers::Tokenizer;
 
-pub fn load_model(device: &Device) -> Result<(BertModel, Tokenizer)> {
+pub fn load_bert_model(device: &Device) -> Result<(BertModel, Tokenizer)> {
     // load the model from hf site
     let api = Api::new()?;
     // let repo = api.model("sentence-transformers/all-MiniLM-L6-v2".to_string());

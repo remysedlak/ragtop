@@ -9,17 +9,26 @@ pub fn connection() -> Result<Connection, Error> {
     conn
 }
 
+// ID : PK
+// SOURCE
+//
 pub fn create_document_table(conn: &Connection) -> Result<usize, Error> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY,
             source TEXT NOT NULL,
+            modified_at INTEGER,
             UNIQUE(source)
         );",
         (),
     )
 }
-
+// ID : PK
+// DOCUMENT_ID : FK
+// UNIT
+// TEXT
+// EMBEDDING
+//
 pub fn create_chunks_table(conn: &Connection) -> Result<usize, Error> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS chunks (
@@ -120,4 +129,30 @@ pub fn search(
     scored.truncate(top_k);
 
     Ok(scored)
+}
+
+pub fn get_document_modified(conn: &Connection, source: &str) -> Result<Option<i64>, Error> {
+    match conn.query_row(
+        "SELECT modified_at FROM documents WHERE source = ?1",
+        (source,),
+        |row| row.get(0),
+    ) {
+        Ok(modified) => Ok(modified),
+        Err(Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+pub fn update_document_modified(
+    conn: &Connection,
+    document_id: i64,
+    modified: i64,
+) -> Result<usize, Error> {
+    conn.execute(
+        "UPDATE documents SET modified_at = ?1 WHERE id = ?2",
+        (modified, document_id),
+    )
+}
+
+pub fn delete_chunks_for_document(conn: &Connection, document_id: i64) -> Result<usize, Error> {
+    conn.execute("DELETE FROM chunks WHERE document_id = ?1", (document_id,))
 }
