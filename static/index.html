@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Notes Search</title>
+    <style>
+        body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+        input { width: 60%; padding: 8px; font-size: 16px; }
+        button { padding: 8px 16px; font-size: 16px; }
+        .result { border-bottom: 1px solid #ccc; padding: 10px 0; }
+        .meta { color: #666; font-size: 13px; }
+        pre { white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Notes Search</h1>
+    <input type="text" id="query" placeholder="Search your notes...">
+    <button id="searchBtn">Search</button>
+    <div id="results"></div>
+
+    <script>
+        const btn = document.getElementById("searchBtn");
+        const queryInput = document.getElementById("query");
+        const resultsDiv = document.getElementById("results");
+
+        async function runSearch() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            resultsDiv.innerHTML = "<p>Searching...</p>";
+
+            try {
+                const res = await fetch("/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: query, top_k: 5 })
+                });
+
+                if (!res.ok) {
+                    resultsDiv.innerHTML = `<p>Error: ${res.status}</p>`;
+                    return;
+                }
+
+                const data = await res.json();
+                resultsDiv.innerHTML = "";
+
+                data.forEach(([source, unit, text, score]) => {
+                    const div = document.createElement("div");
+                    div.className = "result";
+                    div.innerHTML = `
+                        <div class="meta">${source} (${unit}) — score: ${score.toFixed(4)}</div>
+                        <pre>${text}</pre>
+                    `;
+                    resultsDiv.appendChild(div);
+                });
+            } catch (err) {
+                resultsDiv.innerHTML = `<p>Request failed: ${err}</p>`;
+            }
+        }
+
+        btn.addEventListener("click", runSearch);
+        queryInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") runSearch();
+        });
+    </script>
+</body>
+</html>
