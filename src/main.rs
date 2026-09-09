@@ -1,15 +1,14 @@
-use crate::api::{AppState, handler};
+use crate::api::AppState;
 use crate::args::{Commands, RagArgs};
-use crate::db::{create_chunks_table, create_document_table};
 use crate::extract::is_degenerate;
-use axum::{Router, routing::get};
+use axum::Router;
 use candle_core::Device;
 use clap::Parser;
 use tower_http::services::ServeDir;
 
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio;
 use walkdir::WalkDir;
 
 mod api;
@@ -20,35 +19,42 @@ mod hf;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args = RagArgs::parse();
-
+    // load a BERT model
     let device = Device::Cpu;
-    let (model, tokenizer) = hf::load_bert_model(&device)?;
-    let conn = db::connection()?;
-    create_document_table(&conn)?;
-    create_chunks_table(&conn)?;
+    let (model, tokenizer) = hf::load_bert_model(&device, "BAAI/bge-small-en-v1.5")?;
 
+    // load SQLite database
+    let conn = db::connection()?;
+    db::create_document_table(&conn)?;
+    db::create_chunks_table(&conn)?;
+
+    // get cli args and carry out logic
+    let args = RagArgs::parse();
     match args.command {
         Commands::Serve { port } => {
-            // build our application with a single route
-
             let shared_state = Arc::new(AppState {
                 model,
                 tokenizer,
                 device,
-                conn: Mutex::new(conn),
+                conn: tokio::sync::Mutex::new(conn),
             });
+
+            // listener required for requests
             let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
                 .await
                 .unwrap();
+
+            // api needs routes for querying RAG + loading website
             let app = Router::new()
                 .route("/search", axum::routing::post(api::search_handler))
                 .with_state(shared_state)
                 .fallback_service(ServeDir::new("static"));
 
+            // Serve the service with the supplied listener.
             axum::serve(listener, app).await.unwrap();
         }
         Commands::Ingest { path } => {
+            // walk the directory
             for entry in WalkDir::new(&path) {
                 let entry = entry?;
                 if entry.file_type().is_file() {

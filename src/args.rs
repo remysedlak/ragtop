@@ -7,16 +7,17 @@ pub struct RagArgs {
     pub command: Commands,
 }
 
-#[derive(Debug, clap::Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum Commands {
-    Ingest {
-        path: String,
-    },
+    /// use binary to upload RAG documents
+    Ingest { path: String },
+    /// use binary to search RAG database
     Search {
         query: String,
         #[arg(short, long, default_value_t = 5)]
         top_k: usize,
     },
+    /// launch an HTTP server on somes port
     Serve {
         #[arg(short, long, default_value_t = 3000)]
         port: u16,

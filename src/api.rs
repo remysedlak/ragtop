@@ -8,16 +8,14 @@ use std::sync::Arc;
 use tokenizers::Tokenizer;
 use tokio::sync::Mutex;
 
+/// `/search` API json arguments
 #[derive(Deserialize)]
 pub struct SearchRequest {
     pub query: String,
     pub top_k: usize,
 }
 
-pub async fn handler() -> &'static str {
-    "Hello, World!"
-}
-
+/// required app state for RAG operations
 pub struct AppState {
     pub model: BertModel,
     pub tokenizer: Tokenizer,
@@ -25,6 +23,7 @@ pub struct AppState {
     pub conn: Mutex<Connection>,
 }
 
+/// Performs search for API handler
 pub async fn search_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SearchRequest>,

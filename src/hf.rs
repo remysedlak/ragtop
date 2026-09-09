@@ -5,11 +5,12 @@ use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use hf_hub::api::sync::Api;
 use tokenizers::Tokenizer;
 
-pub fn load_bert_model(device: &Device) -> Result<(BertModel, Tokenizer)> {
+/// build HuggingFace bert model
+pub fn load_bert_model(device: &Device, model: &str) -> Result<(BertModel, Tokenizer)> {
     // load the model from hf site
     let api = Api::new()?;
     // let repo = api.model("sentence-transformers/all-MiniLM-L6-v2".to_string());
-    let repo = api.model("BAAI/bge-small-en-v1.5".to_string());
+    let repo = api.model(model.to_string());
     let config_filename = repo.get("config.json")?;
     let tokenizer_filename = repo.get("tokenizer.json")?;
     let weights_filename = repo.get("model.safetensors")?;
@@ -29,6 +30,7 @@ pub fn load_bert_model(device: &Device) -> Result<(BertModel, Tokenizer)> {
     Ok((model, tokenizer))
 }
 
+/// input one chunk of text and return embedding
 pub fn embed(
     model: &BertModel,
     tokenizer: &Tokenizer,
@@ -47,6 +49,8 @@ pub fn embed(
     Ok(flat)
 }
 
+/// L2-normalizes a tensor;
+/// rescales each row vector so its Euclidean length is 1, without changing its direction.
 pub fn normalize_l2(v: &Tensor) -> Result<Tensor> {
     Ok(v.broadcast_div(&v.sqr()?.sum_keepdim(1)?.sqrt()?)?)
 }

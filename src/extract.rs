@@ -3,6 +3,7 @@ use std::{error::Error, fs};
 use tokenizers::Tokenizer;
 use walkdir::DirEntry;
 
+/// A chunk is a piece of a document used for RAG comparison
 #[derive(Debug)]
 pub struct Chunk {
     pub source: String,
@@ -57,6 +58,7 @@ fn chunk_string(
     chunks
 }
 
+/// attempt to remove non-textual elements from chunks
 fn strip_noise(text: &str) -> String {
     let mut result = String::new();
     for line in text.lines() {

@@ -4,6 +4,7 @@ use candle_transformers::models::bert::BertModel;
 use rusqlite::{Connection, Error};
 use tokenizers::Tokenizer;
 
+/// Return connection to SQLite database
 pub fn connection() -> Result<Connection, Error> {
     let conn = Connection::open("notes.db");
     conn
@@ -42,6 +43,7 @@ pub fn create_chunks_table(conn: &Connection) -> Result<usize, Error> {
     )
 }
 
+/// append or return existing document using source
 pub fn get_or_insert_document(conn: &Connection, source: &str) -> Result<i64, Error> {
     conn.execute(
         "INSERT OR IGNORE INTO documents (source) VALUES (?1)",
@@ -55,9 +57,11 @@ pub fn get_or_insert_document(conn: &Connection, source: &str) -> Result<i64, Er
     )
 }
 
+/// turn f32 values into BLOB bytes
 fn f32_vec_to_bytes(v: &[f32]) -> Vec<u8> {
     v.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
+/// turn BLOB bytes into f32 values
 fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
     bytes
         .chunks_exact(4)
@@ -65,6 +69,7 @@ fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// enter one chunk into the database
 pub fn insert_chunk(
     conn: &Connection,
     document_id: i64,
@@ -79,6 +84,7 @@ pub fn insert_chunk(
     )
 }
 
+/// return all chunks for brute forcing
 pub fn get_all_chunks(conn: &Connection) -> Result<Vec<(String, String, String, Vec<f32>)>, Error> {
     let mut stmt = conn.prepare(
         "SELECT documents.source, chunks.unit, chunks.text, chunks.embedding
@@ -105,6 +111,8 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     dot / (norm_a * norm_b)
 }
 
+/// brute force search function
+/// return top_k cosine simularity results for a query
 pub fn search(
     conn: &Connection,
     model: &BertModel,
@@ -142,6 +150,8 @@ pub fn get_document_modified(conn: &Connection, source: &str) -> Result<Option<i
         Err(e) => Err(e),
     }
 }
+
+/// when a document that already existed is ingested, modify the old version instead of duplication
 pub fn update_document_modified(
     conn: &Connection,
     document_id: i64,
@@ -153,6 +163,7 @@ pub fn update_document_modified(
     )
 }
 
+/// delete all chunks for one document source
 pub fn delete_chunks_for_document(conn: &Connection, document_id: i64) -> Result<usize, Error> {
     conn.execute("DELETE FROM chunks WHERE document_id = ?1", (document_id,))
 }
